@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bobo the Happy 3D Friend</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <div id="scene-container"></div>
+    <div id="ui-panel">
+      <h1>Bobo</h1>
+      <p id="status">Press Start to activate Bobo.</p>
+      <p id="goal">Bobo’s goal is to keep you happy every time.</p>
+      <button id="startBtn">Start Bobo</button>
+      <div id="jokeBubble" class="speech hidden"></div>
+      <div id="message" class="message">Bobo says: "I can see you through the webcam!"</div>
+      <video id="video" autoplay muted playsinline></video>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <script type="module" src="script.js"></script>
+</body>
+</html>
