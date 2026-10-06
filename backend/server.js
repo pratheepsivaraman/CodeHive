@@ -6,7 +6,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import connectDB from './config/db.js';
 
-dotenv.config(); // Load from current dir
+dotenv.config();
 
 const app = express();
 const httpServer = createServer(app);
@@ -14,18 +14,24 @@ const httpServer = createServer(app);
 // Setup Socket.IO
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.VITE_API_URL || 'http://localhost:5173',
-    methods: ['GET', 'POST']
-  }
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  },
 });
 
 // Middleware
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cors());
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  })
+);
 
-// Connect Database (Local fallback if URI is empty for now)
-if (process.env.MONGODB_URI) {
+// Connect Database
+if (process.env.NODE_ENV !== 'test') {
   connectDB();
 }
 
@@ -34,8 +40,9 @@ import projectRoutes from './routes/projectRoutes.js';
 import fileRoutes from './routes/fileRoutes.js';
 import githubRoutes from './routes/githubRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
+import executionRoutes from './routes/executionRoutes.js';
 
-// Basic route
+// Basic health check route
 app.get('/', (req, res) => {
   res.send('CodeHive API is running...');
 });
@@ -45,66 +52,96 @@ app.use('/api/projects', projectRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/github', githubRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/execute', executionRoutes);
 
-// Track active users in projects: { projectId: [{ socketId, userId, username }] }
+// Track active users in projects: { projectId: [{ socketId, userId, username, inVoice, isMuted, isSpeaking, activeFileId }] }
 const activeProjectUsers = {};
 
 io.on('connection', (socket) => {
-  console.log(`User connected: ${socket.id}`);
-
   // User joins a project workspace
   socket.on('join-project', ({ projectId, user }) => {
+    if (!projectId || !user) return;
     socket.join(projectId);
-    
+
     if (!activeProjectUsers[projectId]) {
       activeProjectUsers[projectId] = [];
     }
-    
-    // Add user to active list if not already there
-    const existingUser = activeProjectUsers[projectId].find(u => u.userId === user._id);
-    if (!existingUser) {
-      activeProjectUsers[projectId].push({
-        socketId: socket.id,
-        userId: user._id,
-        username: user.username,
-      });
-    }
 
-    // Broadcast updated active users list to everyone in the project
-    io.to(projectId).emit('project-users-updated', activeProjectUsers[projectId]);
-    
-    socket.projectId = projectId; // Store for disconnect handling
+    // Remove any stale entry for this socket or user
+    activeProjectUsers[projectId] = activeProjectUsers[projectId].filter(
+      (u) => u.socketId !== socket.id && u.userId !== user._id
+    );
+
+    activeProjectUsers[projectId].push({
+      socketId: socket.id,
+      userId: user._id,
+      username: user.username,
+      inVoice: false,
+      isMuted: false,
+      isSpeaking: false,
+      activeFileId: null,
+    });
+
+    socket.projectId = projectId;
     socket.userId = user._id;
+    socket.username = user.username;
+
+    // Broadcast updated active users list
+    io.to(projectId).emit('project-users-updated', activeProjectUsers[projectId]);
   });
 
   // User leaves a project workspace
   socket.on('leave-project', ({ projectId }) => {
+    if (!projectId) return;
     socket.leave(projectId);
     if (activeProjectUsers[projectId]) {
-      activeProjectUsers[projectId] = activeProjectUsers[projectId].filter(u => u.socketId !== socket.id);
+      activeProjectUsers[projectId] = activeProjectUsers[projectId].filter(
+        (u) => u.socketId !== socket.id
+      );
       io.to(projectId).emit('project-users-updated', activeProjectUsers[projectId]);
     }
   });
 
-  // Handle Yjs document updates (binary data)
-  // We use a specific room for each file to limit broadcast scope: `${projectId}-${fileId}`
-  socket.on('join-file', ({ projectId, fileId }) => {
+  // Handle Yjs document rooms
+  socket.on('join-file', ({ projectId, fileId }, callback) => {
+    if (!projectId || !fileId) return;
     const fileRoom = `${projectId}-${fileId}`;
     socket.join(fileRoom);
+
+    const socketsInRoom = io.sockets.adapter.rooms.get(fileRoom);
+    console.log(`[Socket] ${socket.id} joined fileRoom ${fileRoom}. Sockets in room:`, socketsInRoom ? Array.from(socketsInRoom) : 0);
+
+    // Ask other peers in the room to send current doc state to the new joiner
+    socket.to(fileRoom).emit('yjs-sync-request', {
+      fileId,
+      requesterSocketId: socket.id,
+    });
+
+    if (typeof callback === 'function') {
+      callback({ success: true, room: fileRoom });
+    }
   });
 
   socket.on('leave-file', ({ projectId, fileId }) => {
+    if (!projectId || !fileId) return;
     const fileRoom = `${projectId}-${fileId}`;
     socket.leave(fileRoom);
   });
 
+  socket.on('yjs-sync-response', ({ targetSocketId, fileId, state }) => {
+    if (targetSocketId && state) {
+      io.to(targetSocketId).emit('yjs-sync-response', { fileId, state });
+    }
+  });
+
   socket.on('yjs-update', ({ projectId, fileId, update }) => {
+    if (!projectId || !fileId) return;
     const fileRoom = `${projectId}-${fileId}`;
-    // Broadcast the update to everyone else in the file room
     socket.to(fileRoom).emit('yjs-update', { fileId, update });
   });
 
   socket.on('yjs-awareness-update', ({ projectId, fileId, update }) => {
+    if (!projectId || !fileId) return;
     const fileRoom = `${projectId}-${fileId}`;
     socket.to(fileRoom).emit('yjs-awareness-update', { fileId, update });
   });
@@ -112,9 +149,14 @@ io.on('connection', (socket) => {
   // --- Presence Updates ---
   const updateProjectUser = (projectId, socketId, updates) => {
     if (activeProjectUsers[projectId]) {
-      const userIndex = activeProjectUsers[projectId].findIndex(u => u.socketId === socketId);
+      const userIndex = activeProjectUsers[projectId].findIndex(
+        (u) => u.socketId === socketId
+      );
       if (userIndex !== -1) {
-        activeProjectUsers[projectId][userIndex] = { ...activeProjectUsers[projectId][userIndex], ...updates };
+        activeProjectUsers[projectId][userIndex] = {
+          ...activeProjectUsers[projectId][userIndex],
+          ...updates,
+        };
         io.to(projectId).emit('project-users-updated', activeProjectUsers[projectId]);
       }
     }
@@ -122,6 +164,21 @@ io.on('connection', (socket) => {
 
   socket.on('active-file-change', ({ projectId, fileId }) => {
     updateProjectUser(projectId, socket.id, { activeFileId: fileId });
+  });
+
+  // Voice lifecycle
+  socket.on('join-voice', ({ projectId }) => {
+    updateProjectUser(projectId, socket.id, { inVoice: true, isMuted: false, isSpeaking: false });
+    socket.to(projectId).emit('user-joined-voice', {
+      socketId: socket.id,
+      userId: socket.userId,
+      username: socket.username,
+    });
+  });
+
+  socket.on('leave-voice', ({ projectId }) => {
+    updateProjectUser(projectId, socket.id, { inVoice: false, isSpeaking: false });
+    socket.to(projectId).emit('user-left-voice', { socketId: socket.id });
   });
 
   socket.on('voice-status', ({ projectId, isMuted }) => {
@@ -146,15 +203,17 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    console.log(`User disconnected: ${socket.id}`);
-    
-    const { projectId, userId } = socket;
+    const { projectId } = socket;
     if (projectId && activeProjectUsers[projectId]) {
-      activeProjectUsers[projectId] = activeProjectUsers[projectId].filter(u => u.socketId !== socket.id);
+      activeProjectUsers[projectId] = activeProjectUsers[projectId].filter(
+        (u) => u.socketId !== socket.id
+      );
       io.to(projectId).emit('project-users-updated', activeProjectUsers[projectId]);
+      socket.to(projectId).emit('user-left-voice', { socketId: socket.id });
     }
   });
 });
+
 const PORT = process.env.PORT || 5000;
 
 if (process.env.NODE_ENV !== 'test') {

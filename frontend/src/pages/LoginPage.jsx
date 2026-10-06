@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowRight, Code2, Hexagon } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
@@ -36,15 +36,15 @@ const LoginPage = () => {
         {/* Decorative Grid */}
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCI+PHBhdGggZD0iTTAgMGg0MHY0MEgweiIgZmlsbD0ibm9uZSIvPPHBhdGggZD0iTTAgMmg0MHYySDB6IiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMDMpIi8+PHBhdGggZD0iTTAgMGgydjQwSDB6IiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMDMpIi8+PC9zdmc+')] opacity-20 mask-image-radial-gradient"></div>
 
-        <div className="relative z-10 text-center animate-fade-in">
+        <div className="relative z-10 text-center animate-fade-in px-8">
           <div className="mb-8 flex justify-center">
             <img src="/logo.png" alt="CodeHive" className="w-80 h-80 object-contain drop-shadow-[0_0_30px_rgba(249,115,22,0.7)]" />
           </div>
           <h1 className="text-5xl font-bold text-white mb-6 tracking-tight leading-tight">
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-light to-orange-400"></span>
+            Where Teams <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-light to-orange-400">Build Together.</span>
           </h1>
-          <p className="text-xl text-text-muted leading-relaxed">
-
+          <p className="text-xl text-text-muted leading-relaxed max-w-md mx-auto">
+            Real-time collaborative code editing, integrated voice channels, and version snapshots for agile development teams.
           </p>
         </div>
       </div>

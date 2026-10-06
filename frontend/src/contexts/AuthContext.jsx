@@ -46,7 +46,14 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider value={{ user, loading, login, register, logout }}>
-      {!loading && children}
+      {loading ? (
+        <div className="min-h-screen bg-background flex flex-col items-center justify-center text-text">
+          <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin mb-4" />
+          <p className="text-sm text-text-muted">Loading CodeHive...</p>
+        </div>
+      ) : (
+        children
+      )}
     </AuthContext.Provider>
   );
 };

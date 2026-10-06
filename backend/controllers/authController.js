@@ -7,15 +7,41 @@ import generateToken from '../utils/generateToken.js';
 export const registerUser = async (req, res) => {
   const { username, email, password } = req.body;
 
+  if (!username || !email || !password) {
+    return res.status(400).json({ message: 'Please provide username, email, and password' });
+  }
+
+  const trimmedUsername = username.trim();
+  const trimmedEmail = email.trim().toLowerCase();
+
+  if (trimmedUsername.length < 3) {
+    return res.status(400).json({ message: 'Username must be at least 3 characters' });
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(trimmedEmail)) {
+    return res.status(400).json({ message: 'Please enter a valid email address' });
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({ message: 'Password must be at least 6 characters' });
+  }
+
   try {
-    const userExists = await User.findOne({ $or: [{ email }, { username }] });
+    const userExists = await User.findOne({
+      $or: [{ email: trimmedEmail }, { username: trimmedUsername }]
+    });
+
     if (userExists) {
-      return res.status(400).json({ message: 'User already exists' });
+      if (userExists.email === trimmedEmail) {
+        return res.status(400).json({ message: 'An account with this email already exists' });
+      }
+      return res.status(400).json({ message: 'Username is already taken' });
     }
 
     const user = await User.create({
-      username,
-      email,
+      username: trimmedUsername,
+      email: trimmedEmail,
       password,
     });
 
@@ -40,8 +66,14 @@ export const registerUser = async (req, res) => {
 export const loginUser = async (req, res) => {
   const { email, password } = req.body;
 
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Please provide email and password' });
+  }
+
+  const trimmedEmail = email.trim().toLowerCase();
+
   try {
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: trimmedEmail });
 
     if (user && (await user.matchPassword(password))) {
       res.json({

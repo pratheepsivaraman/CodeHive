@@ -1,5 +1,7 @@
 node_modules/
 .env
 dist/
+dist-electron/
+backend/workspace/
 .DS_Store
-node_modules
+

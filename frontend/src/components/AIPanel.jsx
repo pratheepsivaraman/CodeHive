@@ -30,8 +30,12 @@ const AIPanel = ({ activeFile }) => {
 
       setHistory(prev => [...prev, { role: 'ai', content: data.suggestion }]);
     } catch (error) {
-      toast.error('Failed to get AI suggestion');
-      setHistory(prev => [...prev, { role: 'ai', content: 'Sorry, I encountered an error processing your request.' }]);
+      const errMsg = error.response?.data?.message || 'Failed to get AI suggestion';
+      toast.error(errMsg);
+      setHistory((prev) => [
+        ...prev,
+        { role: 'ai', content: `⚠️ **Notice:** ${errMsg}` },
+      ]);
     } finally {
       setIsGenerating(false);
     }

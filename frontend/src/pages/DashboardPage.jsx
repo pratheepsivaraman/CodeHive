@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
-import { Plus, Loader2, LogIn, Code2, Sparkles } from 'lucide-react';
+import { Plus, Loader2, LogIn, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
 import ProjectCard from '../components/ProjectCard';
 import CreateProjectModal from '../components/CreateProjectModal';

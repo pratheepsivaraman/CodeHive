@@ -1,6 +1,7 @@
 import File from '../models/File.js';
 import Project from '../models/Project.js';
 import Version from '../models/Version.js';
+import logActivity from '../utils/activityLogger.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -82,6 +83,14 @@ export const createFile = async (req, res) => {
     
     // Sync to disk
     await syncFileToDisk(req.params.projectId, createdFile);
+
+    await logActivity(
+      req.params.projectId,
+      req.user._id,
+      'file_created',
+      `Created ${createdFile.isFolder ? 'folder' : 'file'} "${createdFile.name}"`,
+      createdFile._id
+    );
     
     res.status(201).json(createdFile);
   } catch (error) {
@@ -108,6 +117,14 @@ export const updateFileContent = async (req, res) => {
     // Sync update to disk
     await syncFileToDisk(file.projectId, updatedFile);
 
+    await logActivity(
+      file.projectId,
+      req.user._id,
+      'file_saved',
+      `Saved changes to "${file.name}"`,
+      file._id
+    );
+
     res.json(updatedFile);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -129,6 +146,13 @@ export const deleteFile = async (req, res) => {
     
     // Delete from disk
     await deleteFileFromDisk(file.projectId, file);
+
+    await logActivity(
+      file.projectId,
+      req.user._id,
+      'file_deleted',
+      `Deleted "${file.name}"`
+    );
 
     res.json({ message: 'File removed' });
   } catch (error) {
@@ -159,6 +183,15 @@ export const createFileVersion = async (req, res) => {
     });
 
     const savedVersion = await version.save();
+
+    await logActivity(
+      file.projectId,
+      req.user._id,
+      'version_saved',
+      `Saved version for "${file.name}": "${savedVersion.message}"`,
+      savedVersion._id
+    );
+
     res.status(201).json(savedVersion);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -208,7 +241,7 @@ export const revertFileVersion = async (req, res) => {
     // Sync revert to disk
     await syncFileToDisk(file.projectId, updatedFile);
 
-    // Optionally create a new version denoting the revert
+    // Create a new version denoting the revert
     const newVersion = new Version({
       fileId: file._id,
       content: file.content,
@@ -216,6 +249,14 @@ export const revertFileVersion = async (req, res) => {
       createdBy: req.user._id,
     });
     await newVersion.save();
+
+    await logActivity(
+      file.projectId,
+      req.user._id,
+      'version_reverted',
+      `Reverted "${file.name}" to snapshot "${version.message}"`,
+      newVersion._id
+    );
 
     res.json(updatedFile);
   } catch (error) {

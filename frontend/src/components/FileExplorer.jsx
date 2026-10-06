@@ -3,7 +3,7 @@ import {
   FileCode, FileText, FileIcon, Trash2, Plus, 
   ChevronRight, ChevronDown, FolderPlus, 
   Settings, Key, Info, Braces, MoreHorizontal,
-  FilePlus, RefreshCw, MinusSquare, Upload, FolderUp 
+  FilePlus, Upload, FolderUp, RefreshCw 
 } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
@@ -108,13 +108,41 @@ const FileTreeNode = ({ node, level, onSelect, activeFile, onDelete, onCreateIns
   )
 };
 
-const FileExplorer = ({ projectId, projectName, files, activeFile, onFileSelect, onFileCreated, onFileDeleted }) => {
+const FileExplorer = ({
+  projectId,
+  projectName,
+  files,
+  activeFile,
+  onFileSelect,
+  onFileCreated,
+  onFileDeleted,
+  onSyncFiles,
+}) => {
   const [isCreating, setIsCreating] = useState(false);
   const [creatingType, setCreatingType] = useState('file'); // 'file' or 'folder'
   const [newFileName, setNewFileName] = useState('');
   const [targetFolder, setTargetFolder] = useState(null); // node object
+  const [isSyncing, setIsSyncing] = useState(false);
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
+
+  const handleSyncDisk = async (e) => {
+    e?.stopPropagation();
+    setIsSyncing(true);
+    try {
+      const res = await api.post('/api/execute/sync', { projectId });
+      if (onSyncFiles) onSyncFiles();
+      toast.success(
+        res.data.count > 0
+          ? `Synced ${res.data.count} items from disk`
+          : 'Workspace files up to date'
+      );
+    } catch (_err) {
+      toast.error('Failed to sync workspace');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const tree = useMemo(() => {
     const root = { children: [], fullPath: '/' };
@@ -335,6 +363,13 @@ const FileExplorer = ({ projectId, projectName, files, activeFile, onFileSelect,
               title="Upload Folder"
             >
               <FolderUp size={14} />
+            </button>
+            <button 
+              onClick={handleSyncDisk}
+              className="p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors"
+              title="Refresh / Sync files from terminal workspace"
+            >
+              <RefreshCw size={13} className={isSyncing ? 'animate-spin text-primary' : ''} />
             </button>
           </div>
         </div>

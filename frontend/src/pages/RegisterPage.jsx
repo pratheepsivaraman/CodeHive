@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowRight, Code2, Hexagon } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
 const RegisterPage = () => {
   const [username, setUsername] = useState('');

@@ -1,30 +1,47 @@
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 
-let mongoServer;
+let mongoServer = null;
 
 export const connectDB = async () => {
-  try {
-    let uri = process.env.MONGODB_URI;
-    
-    // Fallback to in-memory database if the user has the default localhost URI but no MongoDB installed.
-    if (uri && (uri.includes('127.0.0.1') || uri.includes('localhost'))) {
-      try {
-        await mongoose.connect(uri, { serverSelectionTimeoutMS: 2000 });
-        console.log(`MongoDB Connected (Local): ${mongoose.connection.host}`);
-        return;
-      } catch (err) {
-        console.log('Local MongoDB not running. Spinning up in-memory database...');
-        mongoServer = await MongoMemoryServer.create();
-        uri = mongoServer.getUri();
-      }
-    }
+  let uri = process.env.MONGODB_URI;
 
-    const conn = await mongoose.connect(uri);
+  // In test environment or if no URI provided, use memory server directly
+  if (process.env.NODE_ENV === 'test' || !uri) {
+    try {
+      if (!mongoServer) {
+        mongoServer = await MongoMemoryServer.create();
+      }
+      uri = mongoServer.getUri();
+      const conn = await mongoose.connect(uri);
+      console.log(`MongoDB Connected (In-Memory Test DB): ${conn.connection.host}`);
+      return conn;
+    } catch (err) {
+      console.error('Failed to start in-memory MongoDB:', err.message);
+      throw err;
+    }
+  }
+
+  // Attempt connection to configured URI with 3.5s timeout
+  try {
+    const conn = await mongoose.connect(uri, { serverSelectionTimeoutMS: 3500 });
     console.log(`MongoDB Connected: ${conn.connection.host}`);
-  } catch (error) {
-    console.error(`Error connecting to MongoDB: ${error.message}`);
-    process.exit(1);
+    return conn;
+  } catch (err) {
+    console.warn(`Could not connect to primary MongoDB (${err.message}).`);
+    console.log('Spinning up in-memory MongoDB fallback database...');
+    try {
+      if (!mongoServer) {
+        mongoServer = await MongoMemoryServer.create();
+      }
+      const fallbackUri = mongoServer.getUri();
+      const conn = await mongoose.connect(fallbackUri);
+      console.log(`MongoDB Connected (In-Memory Fallback): ${conn.connection.host}`);
+      return conn;
+    } catch (fallbackErr) {
+      console.error(`Fatal MongoDB connection error: ${fallbackErr.message}`);
+      process.exit(1);
+    }
   }
 };
 
@@ -34,7 +51,9 @@ export const disconnectDB = async () => {
   }
   if (mongoServer) {
     await mongoServer.stop();
+    mongoServer = null;
   }
 };
 
 export default connectDB;
+
